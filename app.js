@@ -397,21 +397,57 @@ function render(packs, multiSet) {
 
 let brainState = null;
 
-// めくる順: 地味な順 → 当たりが最後(RARITY_ORDER の逆順)
-function revealOrder(cards) {
-  return [...cards].sort(
-    (a, b) => RARITY_ORDER.indexOf(b.rarity) - RARITY_ORDER.indexOf(a.rarity)
-  );
-}
+// 演出の出現率(調整用)
+const BRAIN_ODDS = {
+  surprise: 0.2,     // 不意打ち: 当たりでもチャージなしでいきなり開放される確率
+  fake: 0.12,        // ガセ: ハズレなのにチャージ演出が光る確率
+  fakeRainbow: 0.25, // ガセのうち、虹色(メガ級)チャージになる確率
+};
 
 function startBrainReveal(packs) {
   brainState = { packs, index: 0 };
   const result = document.getElementById("result");
   result.innerHTML = "";
   const summary = document.getElementById("summary");
-  summary.textContent = "カードをタップしてめくろう!";
+  summary.textContent = "好きなカードをタップしてめくろう!";
   summary.classList.remove("has-hit");
   renderBrainPack();
+}
+
+// 画面全体のフラッシュ演出
+function flashScreen(mega) {
+  const el = document.createElement("div");
+  el.className = "screen-flash" + (mega ? " mega" : "");
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), mega ? 1200 : 700);
+}
+
+// 画面シェイク(DM/OR用)
+function shakeScreen() {
+  document.body.classList.add("shake");
+  setTimeout(() => document.body.classList.remove("shake"), 600);
+}
+
+// カードから飛び散るパーティクル
+function spawnParticles(li, mega) {
+  const wrap = document.createElement("div");
+  wrap.className = "particles";
+  const count = mega ? 28 : 16;
+  const colors = mega
+    ? ["#ff5f6d", "#ffc371", "#7ee8fa", "#b06ab3", "#ffffff", "#ffd76a"]
+    : ["#ffd76a", "#ffb347", "#fff2b0", "#ffffff"];
+  for (let i = 0; i < count; i++) {
+    const s = document.createElement("span");
+    const angle = Math.random() * Math.PI * 2;
+    const dist = 60 + Math.random() * (mega ? 160 : 90);
+    s.style.setProperty("--dx", `${Math.cos(angle) * dist}px`);
+    s.style.setProperty("--dy", `${Math.sin(angle) * dist}px`);
+    s.style.background = colors[Math.floor(Math.random() * colors.length)];
+    s.style.animationDelay = `${Math.random() * 0.12}s`;
+    wrap.appendChild(s);
+  }
+  li.appendChild(wrap);
+  setTimeout(() => wrap.remove(), 1400);
 }
 
 function renderBrainPack() {
@@ -429,49 +465,65 @@ function renderBrainPack() {
     `<span class="pack-origin">${pack.setName} ${pack.boxNo}箱目 / ${pack.packNo}パック目</span>`;
   packEl.appendChild(head);
 
-  const order = revealOrder(pack.cards);
   const list = document.createElement("ul");
   list.className = "card-list";
-  const lis = order.map(() => {
+
+  let revealedCount = 0;
+  let busy = false; // チャージ演出中は他のカードをめくれない
+
+  // 封入順のまま並べ、好きなカードからめくれる
+  for (const c of pack.cards) {
     const li = document.createElement("li");
     li.className = "card-row face-down";
     li.innerHTML = `<span class="badge badge-back">?</span><span class="card-name card-back-name">???</span>`;
+
+    li.addEventListener("click", () => {
+      if (busy || !li.classList.contains("face-down")) return;
+      const isHit = HIT_RARITIES.includes(c.rarity);
+      const isMega = ["DM", "OR"].includes(c.rarity);
+
+      const doReveal = () => {
+        li.className =
+          `card-row revealed ${RARITY[c.rarity].cls}` +
+          (isHit ? " hit" : "") +
+          (isMega ? " mega-burst" : isHit ? " hit-burst" : "");
+        li.innerHTML = cardRowHTML(c);
+        if (isHit) {
+          spawnParticles(li, isMega);
+          flashScreen(isMega);
+          if (isMega) shakeScreen();
+        }
+        busy = false;
+        revealedCount++;
+        if (revealedCount >= pack.cards.length) showNextPackButton(packEl);
+      };
+
+      // 不意打ち: 当たりでもたまにチャージなしでいきなり開放
+      const surprise = isHit && Math.random() < BRAIN_ODDS.surprise;
+      // ガセ演出: ハズレなのにチャージだけ光る(たまに虹色まで行く)
+      const fake = !isHit && Math.random() < BRAIN_ODDS.fake;
+      const fakeMega = fake && Math.random() < BRAIN_ODDS.fakeRainbow;
+
+      if (isHit && !surprise) {
+        // 当たりはワンテンポ溜めてから開放(チャージ演出)
+        busy = true;
+        li.classList.add(isMega ? "mega-charging" : "charging");
+        setTimeout(doReveal, isMega ? 1400 : 900);
+      } else if (fake) {
+        // ガセ: 光って期待させてからハズレが出る
+        busy = true;
+        li.classList.add(fakeMega ? "mega-charging" : "charging");
+        setTimeout(doReveal, fakeMega ? 1400 : 900);
+      } else {
+        doReveal();
+      }
+    });
+
     list.appendChild(li);
-    return li;
-  });
-  packEl.appendChild(list);
-
-  let revealed = 0;
-
-  function prepareNext() {
-    if (revealed >= order.length) {
-      showNextPackButton(packEl);
-      return;
-    }
-    const li = lis[revealed];
-    li.classList.add("next");
-    // 次が当たりなら確定演出(虹色に光る)
-    if (HIT_RARITIES.includes(order[revealed].rarity)) {
-      li.classList.add("charged");
-    }
   }
 
-  list.addEventListener("click", () => {
-    if (revealed >= order.length) return;
-    const c = order[revealed];
-    const li = lis[revealed];
-    li.classList.remove("face-down", "next", "charged");
-    li.className = `card-row revealed ${RARITY[c.rarity].cls}` + (HIT_RARITIES.includes(c.rarity) ? " hit" : "");
-    if (HIT_RARITIES.includes(c.rarity)) {
-      li.classList.add(["DM", "OR"].includes(c.rarity) ? "mega-burst" : "hit-burst");
-    }
-    li.innerHTML = cardRowHTML(c);
-    revealed++;
-    prepareNext();
-  });
-
+  packEl.appendChild(list);
   result.appendChild(packEl);
-  prepareNext();
   packEl.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
