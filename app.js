@@ -274,6 +274,51 @@ function openPacks(selections) {
 
 const HIT_RARITIES = ["DM", "OR", "SR", "CPT", "SILVER", "GOLD", "SEC"];
 
+let lastOpened = null; // 直近の開封結果(コピー用)
+
+// Discord等に貼り付けるためのテキストを組み立てる
+function buildResultText(packs) {
+  const lines = ["【デュエマ開封シミュ結果】"];
+
+  const bySet = new Map();
+  packs.forEach((p) => bySet.set(p.setName, (bySet.get(p.setName) || 0) + 1));
+  lines.push([...bySet].map(([name, n]) => `${name}: ${n}パック`).join(" / "));
+  lines.push(document.getElementById("summary").textContent);
+
+  packs.forEach((p, i) => {
+    lines.push("");
+    lines.push(`▼パック${i + 1} (${p.setName} ${p.boxNo}箱目/${p.packNo}パック目)`);
+    for (const c of p.cards) {
+      const base = c.base ? `(${RARITY[c.base].label}枠)` : "";
+      lines.push(`${RARITY[c.rarity].label}: ${c.name}${base}`);
+    }
+  });
+  return lines.join("\n");
+}
+
+function copyResultText() {
+  if (!lastOpened) return;
+  const text = buildResultText(lastOpened);
+  const btn = document.getElementById("copy-btn");
+  const done = () => {
+    const original = "結果をテキストでコピー(Discord用)";
+    btn.textContent = "コピーしました!";
+    setTimeout(() => (btn.textContent = original), 1500);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(done);
+  } else {
+    // 古い環境向けフォールバック
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    ta.remove();
+    done();
+  }
+}
+
 function render(packs, multiSet) {
   const result = document.getElementById("result");
   result.innerHTML = "";
@@ -408,7 +453,16 @@ if (typeof document !== "undefined" && document.getElementById("set-select")) {
       summary.classList.remove("has-hit");
       return;
     }
-    render(openPacks(selections), selections.length > 1);
+    const opened = openPacks(selections);
+    lastOpened = opened;
+    render(opened, selections.length > 1);
+    document.getElementById("actions").hidden = false;
     document.getElementById("open-btn").textContent = "もう一度開封する(新しいカートン)";
+  });
+
+  document.getElementById("copy-btn").addEventListener("click", copyResultText);
+
+  document.getElementById("compact-toggle").addEventListener("change", (e) => {
+    document.getElementById("result").classList.toggle("compact", e.target.checked);
   });
 }

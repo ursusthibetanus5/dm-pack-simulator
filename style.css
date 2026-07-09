@@ -124,10 +124,103 @@ h1 {
   font-weight: bold;
 }
 
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 14px;
+  flex-wrap: wrap;
+}
+
+#copy-btn {
+  padding: 8px 14px;
+  font-size: 0.85rem;
+  color: #e8e8f0;
+  background: #26263a;
+  border: 1px solid #3c3c58;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: filter 0.15s;
+}
+
+#copy-btn:hover {
+  filter: brightness(1.25);
+}
+
+.compact-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  color: #9a9ab0;
+  cursor: pointer;
+  user-select: none;
+}
+
+.compact-toggle input {
+  accent-color: #e94b3c;
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+}
+
 .result {
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+/* コンパクト表示(スクリーンショット用) */
+.result.compact {
+  gap: 6px;
+}
+
+.result.compact .pack {
+  animation: none;
+  opacity: 1;
+}
+
+.result.compact .pack-head {
+  padding: 4px 10px;
+}
+
+.result.compact .pack-title {
+  font-size: 0.78rem;
+}
+
+.result.compact .pack-origin {
+  font-size: 0.66rem;
+}
+
+.result.compact .card-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 6px 8px;
+}
+
+.result.compact .card-row {
+  border: 1px solid #32324a;
+  border-bottom: 1px solid #32324a;
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-size: 0.76rem;
+  gap: 6px;
+  animation: none;
+}
+
+.result.compact .card-row.hit {
+  border-color: #ffd76a;
+  background: rgba(255, 215, 106, 0.08);
+}
+
+.result.compact .badge {
+  flex: none;
+  width: auto;
+  min-width: 26px;
+  padding: 1px 6px;
+  font-size: 0.62rem;
 }
 
 .pack {
