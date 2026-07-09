@@ -380,6 +380,88 @@ function render(packs, multiSet) {
   );
 }
 
+// ---- 出現履歴(localStorageに累積保存) ----
+
+const HISTORY_KEY = "dm-pack-sim-history-v1";
+
+function loadHistory() {
+  try {
+    return JSON.parse(localStorage.getItem(HISTORY_KEY)) || { packs: {}, cards: {} };
+  } catch (e) {
+    return { packs: {}, cards: {} };
+  }
+}
+
+function saveHistory(hist) {
+  try {
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(hist));
+  } catch (e) {
+    // localStorageが使えない環境では履歴なしで動作
+  }
+}
+
+function recordHistory(packs) {
+  const hist = loadHistory();
+  for (const p of packs) {
+    hist.packs[p.setName] = (hist.packs[p.setName] || 0) + 1;
+    if (!hist.cards[p.setName]) hist.cards[p.setName] = {};
+    const m = hist.cards[p.setName];
+    for (const c of p.cards) {
+      const key = `${c.rarity}|${c.base || ""}|${c.name}`;
+      m[key] = (m[key] || 0) + 1;
+    }
+  }
+  saveHistory(hist);
+}
+
+const RARITY_ORDER = ["DM", "OR", "SEC", "GOLD", "CPT", "SILVER", "SR", "VR", "BLACK", "R", "UC", "C"];
+
+function renderHistory() {
+  const body = document.getElementById("history-body");
+  const hist = loadHistory();
+  const setNames = Object.keys(hist.packs);
+  if (setNames.length === 0) {
+    body.innerHTML = '<p class="history-empty">まだ履歴がありません。開封すると自動で記録されます。</p>';
+    return;
+  }
+
+  body.innerHTML = "";
+  for (const setName of setNames) {
+    const total = hist.packs[setName];
+    const heading = document.createElement("h2");
+    heading.className = "history-set";
+    heading.textContent = `${setName} — 累計 ${total}パック`;
+    body.appendChild(heading);
+
+    const entries = Object.entries(hist.cards[setName] || {}).map(([key, count]) => {
+      const [rarity, base, name] = key.split("|");
+      return { rarity, base, name, count };
+    });
+    entries.sort((a, b) => {
+      const d = RARITY_ORDER.indexOf(a.rarity) - RARITY_ORDER.indexOf(b.rarity);
+      if (d !== 0) return d;
+      if (b.count !== a.count) return b.count - a.count;
+      return a.name.localeCompare(b.name, "ja");
+    });
+
+    const list = document.createElement("ul");
+    list.className = "history-list";
+    for (const e of entries) {
+      const meta = RARITY[e.rarity];
+      const baseNote = e.base ? `<span class="sec-base">(${RARITY[e.base].label}枠)</span>` : "";
+      const pct = ((e.count / total) * 100).toFixed(2);
+      const li = document.createElement("li");
+      li.className = `history-row ${meta.cls}`;
+      li.innerHTML =
+        `<span class="badge" title="${meta.name}">${meta.label}</span>` +
+        `<span class="history-name">${e.name}${baseNote}</span>` +
+        `<span class="history-stat">${e.count}枚 / ${pct}%</span>`;
+      list.appendChild(li);
+    }
+    body.appendChild(list);
+  }
+}
+
 // ---- 弾選択UI ----
 
 function buildSetSelector() {
@@ -456,6 +538,8 @@ if (typeof document !== "undefined" && document.getElementById("set-select")) {
     const opened = openPacks(selections);
     lastOpened = opened;
     render(opened, selections.length > 1);
+    recordHistory(opened);
+    if (!document.getElementById("history-body").hidden) renderHistory();
     document.getElementById("actions").hidden = false;
     document.getElementById("open-btn").textContent = "もう一度開封する(新しいカートン)";
   });
@@ -464,5 +548,24 @@ if (typeof document !== "undefined" && document.getElementById("set-select")) {
 
   document.getElementById("compact-toggle").addEventListener("change", (e) => {
     document.getElementById("result").classList.toggle("compact", e.target.checked);
+  });
+
+  document.getElementById("history-toggle").addEventListener("click", () => {
+    const body = document.getElementById("history-body");
+    const show = body.hidden;
+    body.hidden = !show;
+    document.getElementById("history-reset").hidden = !show;
+    document.getElementById("history-note").hidden = !show;
+    document.getElementById("history-toggle").textContent = show ? "出現履歴を隠す" : "出現履歴を表示";
+    if (show) renderHistory();
+  });
+
+  document.getElementById("history-reset").addEventListener("click", () => {
+    if (confirm("出現履歴をすべて削除しますか?")) {
+      try {
+        localStorage.removeItem(HISTORY_KEY);
+      } catch (e) {}
+      renderHistory();
+    }
   });
 }

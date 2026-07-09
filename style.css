@@ -333,6 +333,91 @@ h1 {
   text-shadow: none;
 }
 
+/* 出現履歴 */
+.history {
+  margin-top: 28px;
+  border-top: 1px solid #29293d;
+  padding-top: 16px;
+}
+
+.history-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+#history-toggle,
+#history-reset {
+  padding: 8px 14px;
+  font-size: 0.85rem;
+  color: #e8e8f0;
+  background: #26263a;
+  border: 1px solid #3c3c58;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: filter 0.15s;
+}
+
+#history-toggle:hover,
+#history-reset:hover {
+  filter: brightness(1.25);
+}
+
+#history-reset {
+  color: #ff9f9f;
+  border-color: #5a3040;
+}
+
+.history-note {
+  font-size: 0.72rem;
+  color: #6a6a80;
+  margin: 10px 0 0;
+}
+
+.history-empty {
+  font-size: 0.85rem;
+  color: #9a9ab0;
+  margin: 14px 0 0;
+}
+
+.history-set {
+  font-size: 0.95rem;
+  margin: 18px 0 8px;
+  color: #cfcfe0;
+}
+
+.history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.history-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 6px;
+  border-bottom: 1px solid #29293d;
+  font-size: 0.85rem;
+}
+
+.history-row:last-child {
+  border-bottom: none;
+}
+
+.history-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.history-stat {
+  flex: none;
+  font-size: 0.78rem;
+  color: #9a9ab0;
+  font-variant-numeric: tabular-nums;
+}
+
 .footer {
   margin-top: 32px;
   text-align: center;

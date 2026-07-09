@@ -33,6 +33,17 @@
 
     <div id="result" class="result"></div>
 
+    <section class="history">
+      <div class="history-head">
+        <button id="history-toggle" type="button">出現履歴を表示</button>
+        <button id="history-reset" type="button" hidden>履歴をリセット</button>
+      </div>
+      <p class="history-note" id="history-note" hidden>
+        %は「その弾の累計開封パック数」に対する出現枚数の割合です(ブラウザに保存されます)
+      </p>
+      <div id="history-body" hidden></div>
+    </section>
+
     <footer class="footer">
       収録データ: DM26-RP2 / DM25-RP1 邪神vs邪神(cards.js の SETS に弾を追加できます)
     </footer>
