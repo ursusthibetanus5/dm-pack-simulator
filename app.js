@@ -72,7 +72,9 @@ function pickSecret(set) {
 //   - 残りのR枠には R が被りなく全種類入る(pool.R の種類数 = R枠数 = 16 が前提)
 //   - 黒トレジャー12枚はUC1枚と入れ替わる(R以上と同じパックに共存し得る)
 //   - コモンは1箱で全種が必ず2枚か3枚出る(4枚は揃わない)
-//   - Cが3枚封入されるパックが箱に2つあり、そのパックはUCが1枚少ない
+//   - Cが3枚封入されるパックが箱に2つあり、そのパックはUCが1枚少ない。
+//     3C封入パックはR枠が素のRのパックにのみ存在し、黒トレジャーも入らない
+//     (=UCが1枚もないパックは存在しない)
 //   - アンコモンは1箱で全種が最低1枚・最大3枚出る
 function buildBox(set, boxNo) {
   const cfg = configOf(set);
@@ -121,12 +123,6 @@ function buildBox(set, boxNo) {
     packs.push({ setName: set.name, boxNo, packNo: p + 1, cards });
   }
 
-  // Cが3枚封入されるパック: UC枠1に3枚目のCが入る(UCが1枚減る)
-  let cIdx = 2 * cfg.packsPerBox;
-  sample(packs, Math.min(cfg.tripleCPacksPerBox, packs.length)).forEach((p) => {
-    p.cards[SLOT_UC1] = card(cList[cIdx++], "C");
-  });
-
   // R枠の上位レア(各1パックずつ別のパックに)
   const upgrades = [];
   for (let i = 0; i < cfg.orPerBox; i++) {
@@ -161,12 +157,17 @@ function buildBox(set, boxNo) {
       p.cards[SLOT_R] = card(rCards[i % rCards.length], "R");
     });
 
+  // Cが3枚封入されるパック: R枠が素のRのパックにのみ存在する
+  // (UC枠1に3枚目のCが入り、UCが1枚減る)
+  let cIdx = 2 * cfg.packsPerBox;
+  const plainRPacks = packs.filter((p) => p.cards[SLOT_R].rarity === "R");
+  sample(plainRPacks, Math.min(cfg.tripleCPacksPerBox, plainRPacks.length)).forEach((p) => {
+    p.cards[SLOT_UC1] = card(cList[cIdx++], "C");
+  });
+
   // 黒トレジャーはUC1枚と入れ替え(R枠とは独立に選ぶので、SR等と共存し得る)
-  // ただし「3C封入かつR枠が当たり」のパックには入れない
-  // (UCが1枚もないパックはR枠が素のRのパックでしか発生させない)
-  const blackCandidates = packs.filter(
-    (p) => !(p.cards[SLOT_UC1] !== null && p.cards[SLOT_R].rarity !== "R")
-  );
+  // ただし3C封入パックには入れない(UCが1枚もないパックを作らない)
+  const blackCandidates = packs.filter((p) => p.cards[SLOT_UC1] === null);
   const blackPacks = sample(blackCandidates, Math.min(cfg.blackPerBox, blackCandidates.length));
   blackPacks.forEach((p) => {
     p.cards[SLOT_UC2] = card(pickRandom(pool.BLACK), "BLACK");
