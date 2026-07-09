@@ -400,7 +400,7 @@ let brainState = null;
 // 演出の出現率(調整用)
 const BRAIN_ODDS = {
   surprise: 0.2,     // 不意打ち: 当たりでもチャージなしでいきなり開放される確率
-  fake: 0.12,        // ガセ: ハズレなのにチャージ演出が光る確率
+  fake: 0.06,        // ガセ: ハズレなのにチャージ演出が光る確率
   fakeRainbow: 0.25, // ガセのうち、虹色(メガ級)チャージになる確率
 };
 
@@ -471,8 +471,10 @@ function renderBrainPack() {
   let revealedCount = 0;
   let busy = false; // チャージ演出中は他のカードをめくれない
 
-  // 封入順のまま並べ、好きなカードからめくれる
-  for (const c of pack.cards) {
+  // 脳汁モードでは並び順をシャッフルし、どこがレア枠か分からなくする
+  // (元データは変えないので、コピー機能や通常表示は封入順のまま)
+  const displayOrder = shuffle([...pack.cards]);
+  for (const c of displayOrder) {
     const li = document.createElement("li");
     li.className = "card-row face-down";
     li.innerHTML = `<span class="badge badge-back">?</span><span class="card-name card-back-name">???</span>`;
@@ -495,7 +497,7 @@ function renderBrainPack() {
         }
         busy = false;
         revealedCount++;
-        if (revealedCount >= pack.cards.length) showNextPackButton(packEl);
+        if (revealedCount >= displayOrder.length) showNextPackButton(packEl);
       };
 
       // 不意打ち: 当たりでもたまにチャージなしでいきなり開放
