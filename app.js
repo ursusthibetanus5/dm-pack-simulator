@@ -319,46 +319,25 @@ function copyResultText() {
   }
 }
 
-function render(packs, multiSet) {
-  const result = document.getElementById("result");
-  result.innerHTML = "";
+// カード1行ぶんのHTML(シクは元のレアリティも表示する。例: シク(SR枠))
+function cardRowHTML(c) {
+  const meta = RARITY[c.rarity];
+  const baseNote = c.base
+    ? `<span class="sec-base">(${RARITY[c.base].label}枠)</span>`
+    : "";
+  return (
+    `<span class="badge" title="${meta.name}">${meta.label}</span>` +
+    `<span class="card-name">${c.name}${baseNote}</span>`
+  );
+}
 
+function updateSummary(packs) {
   const counts = { DM: 0, OR: 0, SEC: 0, GOLD: 0, SR: 0, CPT: 0, SILVER: 0, BLACK: 0, VR: 0 };
-
-  packs.forEach((pack, i) => {
-    const packEl = document.createElement("section");
-    packEl.className = "pack";
-    packEl.style.animationDelay = `${Math.min(i, 20) * 0.08}s`;
-
-    const origin =
-      (multiSet ? `${pack.setName} ` : "") +
-      `${pack.boxNo}箱目 / ${pack.packNo}パック目`;
-    const head = document.createElement("header");
-    head.className = "pack-head";
-    head.innerHTML =
-      `<span class="pack-title">パック ${i + 1}</span>` +
-      `<span class="pack-origin">${origin}</span>`;
-    packEl.appendChild(head);
-
-    const list = document.createElement("ul");
-    list.className = "card-list";
-    for (const c of pack.cards) {
+  packs.forEach((p) =>
+    p.cards.forEach((c) => {
       if (c.rarity in counts) counts[c.rarity]++;
-      const meta = RARITY[c.rarity];
-      const li = document.createElement("li");
-      li.className = `card-row ${meta.cls}` + (HIT_RARITIES.includes(c.rarity) ? " hit" : "");
-      // シクは元のレアリティも表示する(例: シク(SR枠))
-      const baseNote = c.base
-        ? `<span class="sec-base">(${RARITY[c.base].label}枠)</span>`
-        : "";
-      li.innerHTML =
-        `<span class="badge" title="${meta.name}">${meta.label}</span>` +
-        `<span class="card-name">${c.name}${baseNote}</span>`;
-      list.appendChild(li);
-    }
-    packEl.appendChild(list);
-    result.appendChild(packEl);
-  });
+    })
+  );
 
   const summary = document.getElementById("summary");
   const parts = [];
@@ -378,6 +357,148 @@ function render(packs, multiSet) {
     "has-hit",
     counts.DM + counts.OR + counts.SEC + counts.GOLD + counts.SR + counts.CPT + counts.SILVER > 0
   );
+}
+
+function render(packs, multiSet) {
+  const result = document.getElementById("result");
+  result.innerHTML = "";
+
+  packs.forEach((pack, i) => {
+    const packEl = document.createElement("section");
+    packEl.className = "pack";
+    packEl.style.animationDelay = `${Math.min(i, 20) * 0.08}s`;
+
+    const origin =
+      (multiSet ? `${pack.setName} ` : "") +
+      `${pack.boxNo}箱目 / ${pack.packNo}パック目`;
+    const head = document.createElement("header");
+    head.className = "pack-head";
+    head.innerHTML =
+      `<span class="pack-title">パック ${i + 1}</span>` +
+      `<span class="pack-origin">${origin}</span>`;
+    packEl.appendChild(head);
+
+    const list = document.createElement("ul");
+    list.className = "card-list";
+    for (const c of pack.cards) {
+      const li = document.createElement("li");
+      li.className = `card-row ${RARITY[c.rarity].cls}` + (HIT_RARITIES.includes(c.rarity) ? " hit" : "");
+      li.innerHTML = cardRowHTML(c);
+      list.appendChild(li);
+    }
+    packEl.appendChild(list);
+    result.appendChild(packEl);
+  });
+
+  updateSummary(packs);
+}
+
+// ---- 脳汁モード(1枚ずつめくる) ----
+
+let brainState = null;
+
+// めくる順: 地味な順 → 当たりが最後(RARITY_ORDER の逆順)
+function revealOrder(cards) {
+  return [...cards].sort(
+    (a, b) => RARITY_ORDER.indexOf(b.rarity) - RARITY_ORDER.indexOf(a.rarity)
+  );
+}
+
+function startBrainReveal(packs) {
+  brainState = { packs, index: 0 };
+  const result = document.getElementById("result");
+  result.innerHTML = "";
+  const summary = document.getElementById("summary");
+  summary.textContent = "カードをタップしてめくろう!";
+  summary.classList.remove("has-hit");
+  renderBrainPack();
+}
+
+function renderBrainPack() {
+  const { packs, index } = brainState;
+  const pack = packs[index];
+  const result = document.getElementById("result");
+
+  const packEl = document.createElement("section");
+  packEl.className = "pack brain-pack";
+
+  const head = document.createElement("header");
+  head.className = "pack-head";
+  head.innerHTML =
+    `<span class="pack-title">パック ${index + 1} / ${packs.length}</span>` +
+    `<span class="pack-origin">${pack.setName} ${pack.boxNo}箱目 / ${pack.packNo}パック目</span>`;
+  packEl.appendChild(head);
+
+  const order = revealOrder(pack.cards);
+  const list = document.createElement("ul");
+  list.className = "card-list";
+  const lis = order.map(() => {
+    const li = document.createElement("li");
+    li.className = "card-row face-down";
+    li.innerHTML = `<span class="badge badge-back">?</span><span class="card-name card-back-name">???</span>`;
+    list.appendChild(li);
+    return li;
+  });
+  packEl.appendChild(list);
+
+  let revealed = 0;
+
+  function prepareNext() {
+    if (revealed >= order.length) {
+      showNextPackButton(packEl);
+      return;
+    }
+    const li = lis[revealed];
+    li.classList.add("next");
+    // 次が当たりなら確定演出(虹色に光る)
+    if (HIT_RARITIES.includes(order[revealed].rarity)) {
+      li.classList.add("charged");
+    }
+  }
+
+  list.addEventListener("click", () => {
+    if (revealed >= order.length) return;
+    const c = order[revealed];
+    const li = lis[revealed];
+    li.classList.remove("face-down", "next", "charged");
+    li.className = `card-row revealed ${RARITY[c.rarity].cls}` + (HIT_RARITIES.includes(c.rarity) ? " hit" : "");
+    if (HIT_RARITIES.includes(c.rarity)) {
+      li.classList.add(["DM", "OR"].includes(c.rarity) ? "mega-burst" : "hit-burst");
+    }
+    li.innerHTML = cardRowHTML(c);
+    revealed++;
+    prepareNext();
+  });
+
+  result.appendChild(packEl);
+  prepareNext();
+  packEl.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+function showNextPackButton(packEl) {
+  const { packs, index } = brainState;
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "next-pack-btn";
+  btn.textContent =
+    index + 1 < packs.length ? `次のパックへ (${index + 2}/${packs.length})` : "結果まとめを見る";
+  btn.addEventListener("click", () => {
+    btn.remove();
+    if (brainState && brainState.index + 1 < brainState.packs.length) {
+      brainState.index++;
+      renderBrainPack();
+    } else {
+      finishBrainReveal();
+    }
+  });
+  packEl.appendChild(btn);
+  btn.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+function finishBrainReveal() {
+  updateSummary(brainState.packs);
+  document.getElementById("actions").hidden = false;
+  brainState = null;
 }
 
 // ---- 出現履歴(localStorageに累積保存) ----
@@ -537,10 +658,17 @@ if (typeof document !== "undefined" && document.getElementById("set-select")) {
     }
     const opened = openPacks(selections);
     lastOpened = opened;
-    render(opened, selections.length > 1);
     recordHistory(opened);
     if (!document.getElementById("history-body").hidden) renderHistory();
-    document.getElementById("actions").hidden = false;
+
+    if (document.getElementById("brain-toggle").checked) {
+      // 脳汁モード: 1枚ずつめくる(コピー等は全部めくり終わってから)
+      document.getElementById("actions").hidden = true;
+      startBrainReveal(opened);
+    } else {
+      render(opened, selections.length > 1);
+      document.getElementById("actions").hidden = false;
+    }
     document.getElementById("open-btn").textContent = "もう一度開封する(新しいカートン)";
   });
 
