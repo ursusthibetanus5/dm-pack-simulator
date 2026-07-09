@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>デュエマ パック開封シミュレータ</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="container">
+    <h1>デュエマ パック開封シミュレータ</h1>
+    <p class="rules">
+      選んだ弾ごとに1カートン(12箱)を生成し、その中から指定したパック数を無作為に開封します。<br>
+      封入仕様: 基本 C,C,R,UC,UC ── 各箱確定 OR1・SR4(種類被りなし)・VR6(種類被りなし)・キャラプレミアム1・銀1・<br>
+      黒12(UC1枚と入れ替えでR以上と共存)・R16(全種被りなしコンプ)・シク1(レアリティは弾ごとの確率で抽選)<br>
+      C25種は箱で必ず2〜3枚(C3枚封入パックが箱に2つ、そのパックはUC1枚)・UC25種は箱で1〜3枚<br>
+      金トレジャーとドリームレアは弾ごとの設定枚数でカートン単位に封入(種類被りなし。同じ箱には入らない)
+    </p>
+
+    <fieldset id="set-select" class="set-select">
+      <legend>開封する弾とパック数(合計5パックまで)</legend>
+    </fieldset>
+
+    <button id="open-btn" type="button">開封する!</button>
+    <p id="summary" class="summary" aria-live="polite"></p>
+
+    <div id="result" class="result"></div>
+
+    <footer class="footer">
+      収録データ: DM26-RP2(実カードリスト)+ダミー3弾(cards.js の SETS に弾を追加できます)
+    </footer>
+  </main>
+
+  <script src="cards.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
