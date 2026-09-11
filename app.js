@@ -36,9 +36,69 @@ function cartonSize(set) {
 }
 
 // パック内のスロット位置
+const SLOT_C1 = 0;
+const SLOT_C2 = 1;
 const SLOT_R = 2;   // R枠(OR/SR/キャラプレミアム/銀/VR/シク と入れ替わる)
-const SLOT_UC1 = 3; // UC枠(金トレジャーと入れ替わる)
+const SLOT_UC1 = 3; // UC枠(金トレジャーと入れ替わる。3C封入パックでは3枚目のC)
 const SLOT_UC2 = 4; // UC枠(黒トレジャーと入れ替わる)
+
+// counts(Map<カード名, 残り枚数>) から、同じ名前が重複しないよう k 種類を引いて
+// 消費する(1パック内に同名カードが2枚以上入らないようにするための共通処理)。
+// exclude に含まれる名前(そのパックに既に入っているシク札の元カード名など)は
+// 対象から除外する。残り枚数が多い種類を優先して引くことで、終盤に特定の種類
+// しか残らず引ける種類数が k に満たなくなる事態を避ける
+function drawDistinct(counts, k, exclude) {
+  const entries = [...counts.entries()].filter(
+    ([name, c]) => c > 0 && !(exclude && exclude.has(name))
+  );
+  shuffle(entries); // 残り枚数が同じ種類同士の優先順位はランダムにする
+  entries.sort((a, b) => b[1] - a[1]);
+  const picked = entries.slice(0, k).map(([name]) => name);
+  picked.forEach((name) => counts.set(name, counts.get(name) - 1));
+  return picked;
+}
+
+// コモンの残り枚数マップを作る: 全種2枚を基本とし、余り枠は種類が被らないよう
+// ランダムな種類に1枚ずつ追加(pool.C が25種なら「12種が3枚+13種が2枚」になる)
+function buildCCounts(pool, totalSlots) {
+  const counts = new Map();
+  if (pool.length * 2 <= totalSlots) {
+    pool.forEach((name) => counts.set(name, 2));
+    let total = pool.length * 2;
+    for (const name of sample(pool, Math.min(totalSlots - total, pool.length))) {
+      counts.set(name, counts.get(name) + 1);
+      total++;
+    }
+    while (total < totalSlots) { // 種類数が範囲外の場合の保険
+      const name = pickRandom(pool);
+      counts.set(name, (counts.get(name) || 0) + 1);
+      total++;
+    }
+  } else {
+    for (let i = 0; i < totalSlots; i++) {
+      const name = pickRandom(pool);
+      counts.set(name, (counts.get(name) || 0) + 1);
+    }
+  }
+  return counts;
+}
+
+// アンコモンの残り枚数マップを作る: 全種1枚を基本とし、残りを1種あたり
+// 最大3枚までのランダムな種類で埋める
+function buildUCCounts(pool, totalSlots) {
+  if (pool.length > totalSlots) {
+    return new Map(sample(pool, totalSlots).map((name) => [name, 1])); // 種類数が枠より多い場合の保険
+  }
+  const counts = new Map(pool.map((name) => [name, 1]));
+  let total = pool.length;
+  while (total < totalSlots) {
+    const candidates = pool.filter((name) => counts.get(name) < 3);
+    const name = candidates.length ? pickRandom(candidates) : pickRandom(pool);
+    counts.set(name, counts.get(name) + 1);
+    total++;
+  }
+  return counts;
+}
 
 // シク枠のカードを1枚抽選する
 // レアリティを weights の重み付きで選び、そのレアリティの登録カードから1種選ぶ
@@ -76,51 +136,19 @@ function pickSecret(set) {
 //     3C封入パックはR枠が素のRのパックにのみ存在し、黒トレジャーも入らない
 //     (=UCが1枚もないパックは存在しない)
 //   - アンコモンは1箱で全種が最低1枚・最大3枚出る
+//   - 同名カードが同じパック内に2枚以上入ることはない
 function buildBox(set, boxNo) {
   const cfg = configOf(set);
   const pool = set.pool;
 
-  // C枠(1箱 60+3C封入パック数 = 62枚)の中身: 全種2枚ずつ+余り枠にランダムな
-  // 種類の3枚目(pool.C が25種なら「12種が3枚+13種が2枚」になる)
-  const cSlots = 2 * cfg.packsPerBox + cfg.tripleCPacksPerBox;
-  const cList = [];
-  if (2 * pool.C.length <= cSlots) {
-    cList.push(...pool.C, ...pool.C);
-    const extra = cSlots - cList.length;
-    cList.push(...sample(pool.C, Math.min(extra, pool.C.length)));
-  }
-  while (cList.length < cSlots) cList.push(pickRandom(pool.C)); // 種類数が範囲外の場合の保険
-  shuffle(cList);
-
-  // UC枠(3C封入パックと黒トレジャーで潰れる分を除いた46枚)の中身: 全種1枚ずつ+
-  // 残りをランダムな種類で埋める(1種あたり最大3枚)
-  const ucSlots = 2 * cfg.packsPerBox - cfg.tripleCPacksPerBox - cfg.blackPerBox;
-  let ucList;
-  if (pool.UC.length <= ucSlots) {
-    ucList = [...pool.UC];
-    const ucCount = {};
-    pool.UC.forEach((name) => (ucCount[name] = 1));
-    while (ucList.length < ucSlots) {
-      const candidates = pool.UC.filter((name) => ucCount[name] < 3);
-      const name = candidates.length ? pickRandom(candidates) : pickRandom(pool.UC);
-      ucCount[name]++;
-      ucList.push(name);
-    }
-  } else {
-    ucList = sample(pool.UC, ucSlots); // 種類数が枠より多い場合の保険
-  }
-  shuffle(ucList);
-
   const packs = [];
   for (let p = 0; p < cfg.packsPerBox; p++) {
-    const cards = [
-      card(cList[2 * p], "C"),
-      card(cList[2 * p + 1], "C"),
-      null, // R枠(後で割り当て)
-      null, // UC枠1(後で割り当て。3C封入パックでは3枚目のC。金/ドリームと入れ替わる)
-      null, // UC枠2(後で割り当て。黒トレジャーと入れ替わる)
-    ];
-    packs.push({ setName: set.name, boxNo, packNo: p + 1, cards });
+    packs.push({
+      setName: set.name,
+      boxNo,
+      packNo: p + 1,
+      cards: [null, null, null, null, null], // C, C, R, UC1, UC2(後で割り当て)
+    });
   }
 
   // R枠の上位レア(各1パックずつ別のパックに)
@@ -159,26 +187,48 @@ function buildBox(set, boxNo) {
 
   // Cが3枚封入されるパック: R枠が素のRのパックにのみ存在する
   // (UC枠1に3枚目のCが入り、UCが1枚減る)
-  let cIdx = 2 * cfg.packsPerBox;
   const plainRPacks = packs.filter((p) => p.cards[SLOT_R].rarity === "R");
-  sample(plainRPacks, Math.min(cfg.tripleCPacksPerBox, plainRPacks.length)).forEach((p) => {
-    p.cards[SLOT_UC1] = card(cList[cIdx++], "C");
-  });
+  const tripleCPacks = new Set(
+    sample(plainRPacks, Math.min(cfg.tripleCPacksPerBox, plainRPacks.length))
+  );
 
   // 黒トレジャーはUC1枚と入れ替え(R枠とは独立に選ぶので、SR等と共存し得る)
   // ただし3C封入パックには入れない(UCが1枚もないパックを作らない)
-  const blackCandidates = packs.filter((p) => p.cards[SLOT_UC1] === null);
-  const blackPacks = sample(blackCandidates, Math.min(cfg.blackPerBox, blackCandidates.length));
-  blackPacks.forEach((p) => {
+  const blackCandidates = packs.filter((p) => !tripleCPacks.has(p));
+  sample(blackCandidates, Math.min(cfg.blackPerBox, blackCandidates.length)).forEach((p) => {
     p.cards[SLOT_UC2] = card(pickRandom(pool.BLACK), "BLACK");
   });
 
-  // 残りのUC枠を箱単位のUCリストで埋める
-  let ucIdx = 0;
-  for (const p of packs) {
-    if (!p.cards[SLOT_UC1]) p.cards[SLOT_UC1] = card(ucList[ucIdx++], "UC");
-    if (!p.cards[SLOT_UC2]) p.cards[SLOT_UC2] = card(ucList[ucIdx++], "UC");
-  }
+  // コモンをパックごとに重複なく割り当てる(1箱 60+3C封入パック数 = 62枚。
+  // pool.C が25種なら「12種が3枚+13種が2枚」になる。3C封入パックはUC枠1に3枚目が入る)
+  // シク札は元カードと同名のため、パック内の他の枠と被らないよう除外する。
+  // シク札入りパックは種類の選択肢が豊富なうちに(先に)処理して、除外により
+  // 選べる種類が尽きる事態を避ける
+  const namesIn = (p) => new Set(p.cards.filter(Boolean).map((c) => c.name));
+  const isSecretPack = (p) => p.cards[SLOT_R] && p.cards[SLOT_R].rarity === "SEC";
+  const inPriorityOrder = (list) => [
+    ...shuffle(list.filter(isSecretPack)),
+    ...shuffle(list.filter((p) => !isSecretPack(p))),
+  ];
+
+  const cCounts = buildCCounts(pool.C, 2 * cfg.packsPerBox + cfg.tripleCPacksPerBox);
+  inPriorityOrder(packs).forEach((p) => {
+    const need = tripleCPacks.has(p) ? 3 : 2;
+    const [c1, c2, c3] = drawDistinct(cCounts, need, namesIn(p));
+    p.cards[SLOT_C1] = card(c1, "C");
+    p.cards[SLOT_C2] = card(c2, "C");
+    if (need === 3) p.cards[SLOT_UC1] = card(c3, "C");
+  });
+
+  // アンコモンをパックごとに重複なく割り当てる(3C封入パックはUC枠1に3枚目のCが、
+  // 黒トレジャー封入パックはUC枠2に黒トレジャーが入っているため、その分は埋めない)
+  const ucCounts = buildUCCounts(pool.UC, 2 * cfg.packsPerBox - cfg.tripleCPacksPerBox - cfg.blackPerBox);
+  inPriorityOrder(packs).forEach((p) => {
+    const emptySlots = [SLOT_UC1, SLOT_UC2].filter((slot) => p.cards[slot] === null);
+    drawDistinct(ucCounts, emptySlots.length, namesIn(p)).forEach((name, i) => {
+      p.cards[emptySlots[i]] = card(name, "UC");
+    });
+  });
 
   return packs;
 }
